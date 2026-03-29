@@ -35,8 +35,8 @@ npm install
 
 Generate Prisma Client and Run Migrations to create database tables:
 ```bash
-npm run --workspace=apps/api prisma generate
-npm run --workspace=apps/api prisma migrate dev --name init
+npm run --workspace=apps/api prisma:generate
+npm run --workspace=apps/api prisma:migrate dev --name init
 ```
 
 ### 3. Setup with Docker
