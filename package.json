@@ -1,0 +1,19 @@
+{
+  "name": "event-mgmt-agency",
+  "version": "1.0.0",
+  "description": "Event Management Agency Backend Monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "npm start --workspace=apps/api",
+    "dev": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.2",
+    "zod": "^4.3.6"
+  }
+}

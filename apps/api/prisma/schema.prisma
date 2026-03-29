@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+}
+
+enum OptionType {
+  FOOD
+  DECOR
+  VENUE
+  ADD_ON
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id              String         @id @default(uuid())
+  email           String         @unique
+  name            String
+  password        String
+  phone           String
+  countryCode     String
+  secondaryPhone  String?
+  photo           String?
+  role            Role           @default(CUSTOMER)
+  refreshTokens   RefreshToken[]
+  bookings        Booking[]
+  notifications   Notification[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model EventCategory {
+  id          String         @id @default(uuid())
+  name        String         @unique
+  description String
+  imageUrl    String?
+  options     CustomOption[]
+  bookings    Booking[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model CustomOption {
+  id          String        @id @default(uuid())
+  type        OptionType
+  name        String
+  description String?
+  price       Float         @default(0)
+  isDefault   Boolean       @default(false)
+  isCustom    Boolean       @default(false)
+  subType     String?       // e.g., 'veg', 'non-veg'
+
+  imageUrl    String?
+  categoryId  String
+  category    EventCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      CustomOption? @relation("SubOptions", fields: [parentId], references: [id], onDelete: Cascade)
+  subOptions  CustomOption[] @relation("SubOptions")
+  bookings    Booking[]     @relation("BookingToOption")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+
+model Booking {
+  id              String         @id @default(uuid())
+  totalPrice      Float
+  status          BookingStatus  @default(PENDING)
+  eventDate       DateTime
+  userId          String
+  user            User           @relation(fields: [userId], references: [id])
+  categoryId      String
+  category        EventCategory  @relation(fields: [categoryId], references: [id])
+  selectedOptions CustomOption[] @relation("BookingToOption")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
