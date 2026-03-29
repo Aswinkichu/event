@@ -8,8 +8,8 @@ class NotificationService {
       port: 587,
       secure: false,
       auth: {
-        user: 'kichuaswin061@gmail.com',
-        pass: 'rxft wjpq kedb ehti',
+        user: process.env.SMTP_MAIL,
+        pass: process.env.SMTP_PASSWORD,
       },
     });
   }
