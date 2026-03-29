@@ -99,6 +99,7 @@ model CustomOption {
 model Booking {
   id              String         @id @default(uuid())
   totalPrice      Float
+  numberOfPeople  Int?           @default(100)
   status          BookingStatus  @default(PENDING)
   eventDate       DateTime
   userId          String

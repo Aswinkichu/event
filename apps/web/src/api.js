@@ -8,6 +8,14 @@ export function setToken(token) {
   localStorage.setItem('token', token);
 }
 
+export function getRefreshToken() {
+  return localStorage.getItem('refreshToken');
+}
+
+export function setRefreshToken(token) {
+  localStorage.setItem('refreshToken', token);
+}
+
 export function getUserRole() {
   return localStorage.getItem('role');
 }
@@ -18,6 +26,7 @@ export function setUserRole(role) {
 
 export function logout() {
   localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
   localStorage.removeItem('role');
   window.location.hash = '';
   window.location.reload();
@@ -27,6 +36,34 @@ export function logout() {
  * Enhanced fetch wrapper that handles auth headers, JSON parsing,
  * and converts API/validation errors into human-readable messages.
  */
+async function refreshAccessToken() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    logout();
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken })
+    });
+
+    if (!response.ok) {
+      logout();
+      return null;
+    }
+
+    const data = await response.json();
+    setToken(data.accessToken);
+    return data.accessToken;
+  } catch (error) {
+    logout();
+    return null;
+  }
+}
+
 export async function apiFetch(endpoint, options = {}) {
   const token = getToken();
   
@@ -50,6 +87,23 @@ export async function apiFetch(endpoint, options = {}) {
     });
   } catch (networkErr) {
     throw new Error('Network error. Please check your connection and try again.');
+  }
+
+  // If 401 and we have a refresh token, try to refresh
+  if (response.status === 401 && getRefreshToken()) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      // Retry the request with new token
+      headers['Authorization'] = `Bearer ${newToken}`;
+      try {
+        response = await fetch(`${API_BASE}${endpoint}`, {
+          ...options,
+          headers,
+        });
+      } catch (networkErr) {
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+    }
   }
 
   let data;

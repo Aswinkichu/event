@@ -303,7 +303,7 @@ export async function renderAdmin(container) {
             <div style="padding: 1rem;">
               <span style="font-size: 0.65rem; text-transform:uppercase; color:var(--accent); font-weight:700;">${opt.type}</span>
               <h4 style="margin: 0.25rem 0;">${opt.name}</h4>
-              <p style="font-size: 0.8rem; color: var(--text-muted);">$${opt.price}</p>
+              <p style="font-size: 0.8rem; color: var(--text-muted);">₹${opt.price}</p>
               
               ${itemSubs.length > 0 ? `
                 <div style="margin-top: 1rem; padding-top: 0.5rem; border-top: 1px dashed #eee;">
@@ -313,7 +313,7 @@ export async function renderAdmin(container) {
                       <li style="font-size: 0.75rem; display:flex; align-items:center; justify-content:space-between; margin-bottom: 0.3rem; background:#f9f9f9; padding: 0.25rem 0.5rem; border-radius:4px;">
                         <div style="display:flex; align-items:center; gap:0.5rem;">
                           ${s.imageUrl ? `<img src="${s.imageUrl}" style="width:24px; height:24px; object-fit:cover; border-radius:4px;">` : '<div style="width:24px; height:24px; background:#eee; border-radius:4px;"></div>'}
-                          <span>${s.name} ($${s.price})</span>
+                          <span>${s.name} (₹${s.price})</span>
                         </div>
                         <button onclick="window.deleteOption('${s.id}', '${catId}', '${catName}')" style="background:none; border:none; color:red; cursor:pointer; font-size:0.7rem;">×</button>
                       </li>
@@ -419,7 +419,7 @@ export async function renderAdmin(container) {
                               <div style="flex: 1;">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
                                   <span style="font-weight: 700; font-size: 1rem;">${mainOpt.name}</span>
-                                  <span style="font-weight: 700; color: var(--primary);">$${mainOpt.price}</span>
+                                  <span style="font-weight: 700; color: var(--primary);">₹${mainOpt.price}</span>
                                 </div>
                                 ${mainOpt.isCustom ? '<span style="font-size: 0.65rem; background: var(--accent); color: #fff; padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 700;">CUSTOM REQUEST</span>' : ''}
                               </div>
@@ -433,7 +433,7 @@ export async function renderAdmin(container) {
                                       ${child.imageUrl ? `<img src="${child.imageUrl}" style="width: 30px; height: 30px; object-fit: cover; border-radius: 4px;">` : '<div style="width:30px; height:30px; background:#eee; border-radius:4px;"></div>'}
                                       <span style="font-size: 0.9rem; color: #444;">${child.name}</span>
                                     </div>
-                                    <span style="font-weight: 600; font-size: 0.9rem; color: #666;">$${child.price}</span>
+                                    <span style="font-weight: 600; font-size: 0.9rem; color: #666;">₹${child.price}</span>
                                   </div>
                                 `).join('')}
                               </div>
@@ -449,7 +449,7 @@ export async function renderAdmin(container) {
                               <div style="flex: 1;">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
                                   <span style="font-weight: 700; font-size: 1rem;">${orphan.name}</span>
-                                  <span style="font-weight: 700; color: var(--primary);">$${orphan.price}</span>
+                                  <span style="font-weight: 700; color: var(--primary);">₹${orphan.price}</span>
                                 </div>
                                 <span style="font-size: 0.65rem; color: #999;">${orphan.isCustom ? 'CUSTOM REQUEST' : 'ADDITIONAL ITEM'}</span>
                               </div>
@@ -467,7 +467,7 @@ export async function renderAdmin(container) {
                 <span style="font-size: 1rem; opacity: 0.8; display: block; margin-bottom: 0.3rem;">Total Amount</span>
                 <span style="font-size: 0.8rem; opacity: 0.6;">Including all selected options & requests</span>
               </div>
-              <span style="font-size: 2.5rem; font-weight: 800;">$${b.selectedOptions.reduce((acc, curr) => acc + curr.price, 0)}</span>
+              <span style="font-size: 2.5rem; font-weight: 800;">₹${b.selectedOptions.reduce((acc, curr) => acc + curr.price, 0)}</span>
             </div>
           `;
           

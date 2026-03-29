@@ -1,4 +1,5 @@
 import { apiFetch } from '../api.js';
+import { showPaymentGateway } from '../payment.js';
 
 export async function renderCustomer(container) {
   container.innerHTML = `
@@ -165,6 +166,11 @@ export async function renderCustomer(container) {
                <input type="text" id="booking-date" placeholder="Select Date and Time" required style="font-size: 1.1rem; padding: 1rem;">
             </div>
             
+            <div class="input-group" style="margin-bottom: 3rem;">
+              <label style="font-size: 1.1rem; font-weight: 600; color: var(--text-main); margin-bottom: 1rem;">Number of People</label>
+               <input type="number" id="number-of-people" placeholder="e.g., 50" min="1" style="font-size: 1.1rem; padding: 1rem;">
+            </div>
+            
             <h3 style="margin-bottom: 2rem; font-size: 1.5rem;">Select Your Package & Options</h3>
             <div class="options-container" style="margin-bottom: 3rem;">
       `;
@@ -195,7 +201,7 @@ export async function renderCustomer(container) {
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                       <span class="option-type">${opt.type}</span>
-                      <span class="option-price">$${opt.price}</span>
+                      <span class="option-price">₹${opt.price}</span>
                     </div>
                   </div>
                 </div>
@@ -214,7 +220,7 @@ export async function renderCustomer(container) {
                           ${s.imageUrl ? `<img src="${s.imageUrl}" alt="${s.name}" style="width: 100%; height: 100px; object-fit: cover; border-bottom: 1px solid #eee;">` : '<div style="width: 100%; height: 100px; background: #f8f8f8; display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 0.7rem;">No Image</div>'}
                           <div style="padding: 0.75rem;">
                             <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-main); margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${s.name}</div>
-                            <div style="font-size: 0.8rem; color: var(--accent); font-weight: 700;">+$${s.price}</div>
+                            <div style="font-size: 0.8rem; color: var(--accent); font-weight: 700;">+₹${s.price}</div>
                           </div>
                           <div class="selection-indicator" style="position: absolute; top: 0.5rem; right: 0.5rem; width: 20px; height: 20px; background: #fff; border: 2px solid var(--border); border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">
                              <span style="color: #fff; font-size: 0.7rem; font-weight: bold; display: none;">✓</span>
@@ -304,7 +310,7 @@ export async function renderCustomer(container) {
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                       <span class="option-type">${opt.type}</span>
-                      <span class="option-price">$${opt.price}</span>
+                      <span class="option-price">₹${opt.price}</span>
                     </div>
                   </div>
                 </div>
@@ -347,14 +353,14 @@ export async function renderCustomer(container) {
             }
           }
         });
-        document.getElementById('total-price').innerText = `$${total}`;
+        document.getElementById('total-price').innerText = `₹${total}`;
       };
 
       html += `
             <div style="padding-top: 2rem; border-top: 2px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #fffcfd; margin: 1.5rem -3rem -3rem; padding: 2rem 3rem; border-radius: 0 0 16px 16px;">
               <div>
                 <span style="font-size: 1.1rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Total Estimated Cost</span>
-                <span id="total-price" style="font-size: 2rem; font-weight: 800; color: var(--text-main);">$0</span>
+                <span id="total-price" style="font-size: 2rem; font-weight: 800; color: var(--text-main);">₹0</span>
               </div>
               <button class="btn primary" type="submit" style="font-size: 1.1rem; padding: 1rem 3rem;">Confirm Booking</button>
             </div>
@@ -385,26 +391,48 @@ export async function renderCustomer(container) {
       document.getElementById('booking-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const date = document.getElementById('booking-date').value;
+        const numberOfPeople = parseInt(document.getElementById('number-of-people').value) || undefined;
         const selectedOptions = Array.from(document.querySelectorAll('input[name="booking-options"]:checked')).map(cb => cb.value);
         
-        try {
-          await apiFetch('/customer/bookings', {
-            method: 'POST',
-            body: JSON.stringify({
-              categoryId,
-              selectedOptions,
-              eventDate: new Date(date).toISOString()
-            })
-          });
-          showToast('Booking successful! 🎉', 'success');
-          document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('primary'));
-          document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.add('secondary'));
-          document.getElementById('tab-my-bookings').classList.remove('secondary');
-          document.getElementById('tab-my-bookings').classList.add('primary');
-          loadMyBookings();
-        } catch (err) {
-          document.getElementById('booking-error').innerHTML = err.message.replace(/\n/g, '<br>');
+        if (selectedOptions.length === 0) {
+          document.getElementById('booking-error').innerHTML = 'Please select at least one option';
+          return;
         }
+        
+        const totalPrice = Array.from(document.querySelectorAll('input[name="booking-options"]:checked'))
+          .reduce((sum, cb) => sum + parseFloat(cb.dataset.price || 0), 0);
+        
+        // Show payment gateway
+        showPaymentGateway(
+          totalPrice,
+          async (paymentData) => {
+            // Payment successful - create booking
+            try {
+              await apiFetch('/customer/bookings', {
+                method: 'POST',
+                body: JSON.stringify({
+                  categoryId,
+                  selectedOptions,
+                  eventDate: new Date(date).toISOString(),
+                  numberOfPeople,
+                  paymentId: paymentData.transactionId
+                })
+              });
+              showToast('Booking successful! 🎉', 'success');
+              document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('primary'));
+              document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.add('secondary'));
+              document.getElementById('tab-my-bookings').classList.remove('secondary');
+              document.getElementById('tab-my-bookings').classList.add('primary');
+              loadMyBookings();
+            } catch (err) {
+              document.getElementById('booking-error').innerHTML = err.message.replace(/\n/g, '<br>');
+            }
+          },
+          (error) => {
+            // Payment failed or cancelled
+            showToast(error || 'Payment cancelled', 'error');
+          }
+        );
       });
       
     } catch (err) {

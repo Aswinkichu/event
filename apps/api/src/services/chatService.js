@@ -1,262 +1,266 @@
 const prisma = require('../config/prisma');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
+const MODEL_NAME = "gemini-1.5-flash"; // Or your preferred version
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent`;
 
-// Tool implementations
-async function getEventCategories() {
-  const categories = await prisma.eventCategory.findMany({
-    select: { name: true, description: true }
-  });
-  return categories;
-}
-
-async function getCategoryOptions(categoryName) {
-  const category = await prisma.eventCategory.findFirst({
-    where: { name: { contains: categoryName, mode: 'insensitive' } },
-    include: {
-      options: {
-        select: {
-          name: true,
-          description: true,
-          price: true,
-          type: true,
-          subType: true,
-          parentId: true,
-          subOptions: {
-            select: {
-              name: true,
-              description: true,
-              price: true,
-              type: true,
-              subType: true
-            }
-          }
+/**
+ * 1. TOOL DECLARATIONS
+ * These tell Gemini what functions you have and what they do.
+ */
+const tools = [
+  {
+    function_declarations: [
+      {
+        name: "get_event_categories",
+        description: "Fetch all available event categories (e.g., Wedding, Birthday).",
+      },
+      {
+        name: "get_category_options",
+        description: "Get detailed packages and options for a specific event category.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            categoryName: { type: "STRING", description: "The name of the category" }
+          },
+          required: ["categoryName"]
+        }
+      },
+      {
+        name: "get_option_subitems",
+        description: "Get specific sub-items or variations for a parent event option.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            optionName: { type: "STRING", description: "The name of the parent option" }
+          },
+          required: ["optionName"]
+        }
+      },
+      {
+        name: "get_options_in_budget",
+        description: "List all individual items available within a specific price range.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            budget: { type: "NUMBER", description: "Maximum price per item" },
+            categoryName: { type: "STRING", description: "Filter by category (optional)" }
+          },
+          required: ["budget"]
+        }
+      },
+      {
+        name: "suggest_package_for_budget",
+        description: "Generates a balanced combination of items (Venue, Food, Decor) within a total budget.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            budget: { type: "NUMBER", description: "The total budget for the whole event" },
+            categoryName: { type: "STRING", description: "Filter by category (optional)" }
+          },
+          required: ["budget"]
         }
       }
-    }
-  });
-  return category;
-}
+    ]
+  }
+];
 
-async function getOptionSubitems(optionName) {
-  const option = await prisma.customOption.findFirst({
-    where: { name: { contains: optionName, mode: 'insensitive' } },
-    include: {
-      subOptions: {
-        select: {
-          name: true,
-          description: true,
-          price: true,
-          type: true,
-          subType: true
+/**
+ * 2. DATABASE TOOLS (Prisma Logic - Kept from your original)
+ */
+const dbTools = {
+  async get_event_categories() {
+    const categories = await prisma.eventCategory.findMany({ select: { name: true, description: true } });
+    console.log('get_event_categories result:', categories);
+    return categories;
+  },
+
+  async get_category_options({ categoryName }) {
+    return await prisma.eventCategory.findFirst({
+      where: { name: { contains: categoryName, mode: 'insensitive' } },
+      include: {
+        options: {
+          where: { parentId: null },
+          select: { name: true, description: true, price: true, type: true }
         }
       }
-    }
-  });
-  
-  if (!option) return { error: 'Option not found' };
-  
-  return {
-    parentOption: {
-      name: option.name,
-      description: option.description,
-      price: option.price,
-      type: option.type
-    },
-    subItems: option.subOptions
-  };
-}
+    });
+  },
 
-async function getOptionsInBudget(budget, categoryName = null) {
-  const where = categoryName ? {
-    category: { name: { contains: categoryName, mode: 'insensitive' } }
-  } : {};
-  
-  const options = await prisma.customOption.findMany({
-    where: {
-      ...where,
-      price: { lte: parseFloat(budget) },
-      parentId: null
-    },
-    select: {
-      name: true,
-      description: true,
-      price: true,
-      type: true,
-      category: { select: { name: true } }
-    },
-    orderBy: { price: 'desc' },
-    take: 20
-  });
-  
-  return options;
-}
+  async get_option_subitems({ optionName }) {
+    const option = await prisma.customOption.findFirst({
+      where: { name: { contains: optionName, mode: 'insensitive' } },
+      include: { subOptions: true }
+    });
+    return option ? { parent: option.name, subItems: option.subOptions } : { error: "Not found" };
+  },
 
-async function suggestPackageForBudget(budget, categoryName = null) {
-  const totalBudget = parseFloat(budget);
-  
-  const where = categoryName ? {
-    category: { name: { contains: categoryName, mode: 'insensitive' } }
-  } : {};
-  
-  const allOptions = await prisma.customOption.findMany({
-    where: {
-      ...where,
-      parentId: null
-    },
-    select: {
-      name: true,
-      price: true,
-      type: true,
-      category: { select: { name: true } }
-    },
-    orderBy: { price: 'asc' }
-  });
-  
-  // Group by type
-  const byType = {};
-  allOptions.forEach(opt => {
-    if (!byType[opt.type]) byType[opt.type] = [];
-    byType[opt.type].push(opt);
-  });
-  
-  // Try to build a balanced package
-  const suggestion = [];
-  let remaining = totalBudget;
-  
-  for (const type of Object.keys(byType)) {
-    const options = byType[type].filter(o => o.price <= remaining);
-    if (options.length > 0) {
-      const selected = options[0];
-      suggestion.push(selected);
-      remaining -= selected.price;
-    }
-  }
-  
-  return {
-    totalBudget,
-    suggestedPackage: suggestion,
-    totalCost: suggestion.reduce((sum, opt) => sum + opt.price, 0),
-    remainingBudget: remaining
-  };
-}
+  async get_options_in_budget({ budget, categoryName }) {
+    const where = { price: { lte: budget }, parentId: null };
+    if (categoryName) where.category = { name: { contains: categoryName, mode: 'insensitive' } };
+    return await prisma.customOption.findMany({ where, take: 10 });
+  },
 
-// Chat with Gemini
-async function chat(userMessage, conversationHistory = []) {
-  const systemPrompt = `You are a helpful event planning assistant. You help customers find the perfect event packages within their budget.
-You have access to database tools to fetch real event data. Be friendly, concise, and helpful.
-When suggesting packages, always include prices and help customers stay within budget.
-
-Available tools:
-1. get_event_categories() - Get all event categories
-2. get_category_options(categoryName) - Get options for a category with sub-items
-3. get_option_subitems(optionName) - Get sub-items for a specific option
-4. get_options_in_budget(budget, categoryName?) - Get all options within a budget
-5. suggest_package_for_budget(budget, categoryName?) - Suggest a balanced package for a budget
-
-Help customers by:
-- Showing what's available in their budget
-- Suggesting balanced packages (food, venue, decor, etc.)
-- Explaining options and their prices
-- Answering questions about events and packages`;
-
-  let conversationText = systemPrompt + '\n\n';
-  conversationHistory.forEach(msg => {
-    conversationText += `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}\n`;
-  });
-  conversationText += `User: ${userMessage}\nAssistant:`;
-
-  const toolResult = await detectAndExecuteTool(userMessage, conversationHistory);
-  
-  if (toolResult) {
-    conversationText += `\n[Tool Result: ${JSON.stringify(toolResult)}]\n\nBased on this data, provide a helpful response:`;
-  }
-
-  try {
-    const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: conversationText }]
-        }]
-      })
+  async suggest_package_for_budget({ budget, categoryName }) {
+    const where = categoryName ? { category: { name: { contains: categoryName, mode: 'insensitive' } } } : {};
+    const allOptions = await prisma.customOption.findMany({
+      where: { ...where, parentId: null },
+      orderBy: { price: 'asc' }
     });
 
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${data.error?.message || response.statusText}`);
+    const suggestion = [];
+    let remaining = budget;
+    const types = [...new Set(allOptions.map(o => o.type))];
+
+    for (const type of types) {
+      const bestFit = allOptions.find(o => o.type === type && o.price <= remaining);
+      if (bestFit) {
+        suggestion.push(bestFit);
+        remaining -= bestFit.price;
+      }
     }
+    return { suggestedPackage: suggestion, totalCost: budget - remaining, remainingBudget: remaining };
+  }
+};
+
+/**
+ * 3. MAIN CHAT LOGIC
+ */
+async function chat(userMessage, conversationHistory = []) {
+  try {
+    const systemInstruction = "You are a helpful event planning assistant. Use the provided tools to fetch real data. Always show prices and stay within the user's budget.";
     
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+    let response = await callGemini(userMessage, conversationHistory, systemInstruction);
+    
+    if (!response.candidates || !response.candidates[0] || !response.candidates[0].content) {
+      console.error('Invalid Gemini response:', JSON.stringify(response, null, 2));
       throw new Error('Invalid response from Gemini API');
     }
+    
+    let messagePart = response.candidates[0].content.parts[0];
+    let currentHistory = [...conversationHistory, { role: 'user', parts: [{ text: userMessage }] }];
+    
+    // Handle multiple sequential function calls
+    let maxIterations = 5;
+    let iterations = 0;
+    
+    while (messagePart.functionCall && iterations < maxIterations) {
+      iterations++;
+      const fnName = messagePart.functionCall.name;
+      const fnArgs = messagePart.functionCall.args;
 
-    const assistantMessage = data.candidates[0].content.parts[0].text;
+      console.log(`AI calling tool (iteration ${iterations}): ${fnName}`, fnArgs);
 
-    // Remove tool call syntax from response
-    const cleanMessage = assistantMessage.replace(/\[TOOL:[^\]]+\]\{[^}]*\}/g, '').trim();
+      const toolResult = await dbTools[fnName](fnArgs);
+      console.log('Tool result:', JSON.stringify(toolResult, null, 2));
+
+      const finalResponse = await callGeminiWithToolResult(
+        currentHistory,
+        messagePart,
+        fnName, 
+        toolResult
+      );
+      
+      console.log('Response from Gemini:', JSON.stringify(finalResponse, null, 2));
+
+      if (!finalResponse.candidates || !finalResponse.candidates[0] || !finalResponse.candidates[0].content) {
+        console.error('Invalid final response:', JSON.stringify(finalResponse, null, 2));
+        throw new Error('Invalid response from Gemini API');
+      }
+      
+      // Update history with function call and response
+      currentHistory.push({ role: 'model', parts: [messagePart] });
+      currentHistory.push({
+        role: 'function',
+        parts: [{
+          functionResponse: {
+            name: fnName,
+            response: { content: toolResult }
+          }
+        }]
+      });
+
+      messagePart = finalResponse.candidates[0].content.parts[0];
+    }
+    
+    // Final text response
+    if (!messagePart.text) {
+      throw new Error('No text response from Gemini');
+    }
 
     return {
-      message: cleanMessage,
+      message: messagePart.text,
       conversationHistory: [
         ...conversationHistory,
-        { role: 'user', content: userMessage },
-        { role: 'assistant', content: cleanMessage }
+        { role: 'user', parts: [{ text: userMessage }] },
+        { role: 'model', parts: [{ text: messagePart.text }] }
       ]
     };
+
   } catch (error) {
-    console.error('Gemini API Error:', error);
-    throw new Error('Failed to get response from AI assistant');
+    console.error('Chat Error:', error);
+    throw new Error('Failed to process chat');
   }
 }
 
-async function detectAndExecuteTool(message, history) {
-  const lowerMsg = message.toLowerCase();
+/**
+ * HELPERS
+ */
+async function callGemini(message, history, systemInstruction) {
+  const payload = {
+    system_instruction: { parts: [{ text: systemInstruction }] },
+    contents: [...history, { role: 'user', parts: [{ text: message }] }],
+    tools: tools
+  };
+
+  const res = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
   
-  // Check for budget queries
-  const budgetMatch = message.match(/\$?(\d+(?:,\d{3})*(?:\.\d{2})?)/);
-  if ((lowerMsg.includes('budget') || lowerMsg.includes('money') || lowerMsg.includes('afford') || lowerMsg.includes('have')) && budgetMatch) {
-    const budget = parseFloat(budgetMatch[1].replace(/,/g, ''));
-    
-    let categoryName = null;
-    if (lowerMsg.includes('birthday')) categoryName = 'birthday';
-    else if (lowerMsg.includes('wedding')) categoryName = 'wedding';
-    else if (lowerMsg.includes('corporate')) categoryName = 'corporate';
-    
-    if (lowerMsg.includes('suggest') || lowerMsg.includes('package') || lowerMsg.includes('recommend')) {
-      return await suggestPackageForBudget(budget, categoryName);
-    } else {
-      return await getOptionsInBudget(budget, categoryName);
-    }
+  const data = await res.json();
+  
+  if (!res.ok) {
+    console.error('Gemini API error:', JSON.stringify(data, null, 2));
+    throw new Error(`Gemini API error: ${data.error?.message || res.statusText}`);
   }
   
-  // Check for category listing
-  if (lowerMsg.includes('categories') || lowerMsg.includes('what events') || lowerMsg.includes('types of events')) {
-    return await getEventCategories();
+  return data;
+}
+
+async function callGeminiWithToolResult(history, functionCallPart, fnName, toolResult) {
+  const payload = {
+    contents: [
+      ...history,
+      { role: 'model', parts: [functionCallPart] },
+      {
+        role: 'function',
+        parts: [{
+          functionResponse: {
+            name: fnName,
+            response: { content: toolResult }
+          }
+        }]
+      }
+    ],
+    tools: tools
+  };
+
+  const res = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  
+  const data = await res.json();
+  
+  if (!res.ok) {
+    console.error('Gemini API error (tool result):', JSON.stringify(data, null, 2));
+    throw new Error(`Gemini API error: ${data.error?.message || res.statusText}`);
   }
   
-  // Check for category options
-  const categoryMatch = lowerMsg.match(/(?:options|packages|items|plan).*?(?:for|in)\s+([\w\s]+?)(?:\?|$|\.|,)/i);
-  if (categoryMatch || lowerMsg.includes('wedding') || lowerMsg.includes('birthday') || lowerMsg.includes('corporate')) {
-    const categoryName = categoryMatch ? categoryMatch[1].trim() : 
-                        lowerMsg.includes('wedding') ? 'wedding' :
-                        lowerMsg.includes('birthday') ? 'birthday' : 'corporate';
-    return await getCategoryOptions(categoryName);
-  }
-  
-  // Check for sub-items
-  const subItemMatch = lowerMsg.match(/(?:sub|variations|types).*?(?:for|of)\s+([\w\s]+?)(?:\?|$|\.|,)/i);
-  if (subItemMatch || lowerMsg.includes('sub-items') || lowerMsg.includes('subitems')) {
-    const optionName = subItemMatch ? subItemMatch[1].trim() : '';
-    if (optionName) {
-      return await getOptionSubitems(optionName);
-    }
-  }
-  
-  return null;
+  return data;
 }
 
 module.exports = { chat };

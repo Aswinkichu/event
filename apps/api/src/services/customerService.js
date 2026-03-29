@@ -75,7 +75,7 @@ class CustomerService {
   }
 
 
-  async createBooking(userId, categoryId, selectedOptionsIds, eventDate) {
+  async createBooking(userId, categoryId, selectedOptionsIds, eventDate, numberOfPeople) {
     const options = await prisma.customOption.findMany({
       where: {
         id: { in: selectedOptionsIds }
@@ -89,6 +89,7 @@ class CustomerService {
         userId,
         categoryId,
         totalPrice,
+        numberOfPeople,
         eventDate: new Date(eventDate),
         selectedOptions: {
           connect: selectedOptionsIds.map(id => ({ id }))

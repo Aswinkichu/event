@@ -1,4 +1,4 @@
-import { apiFetch, setToken, setUserRole } from '../api.js';
+import { apiFetch, setToken, setUserRole, setRefreshToken } from '../api.js';
 
 export function renderAuth(container) {
   container.innerHTML = `
@@ -74,6 +74,7 @@ export function renderAuth(container) {
           body: JSON.stringify({ email, password })
         });
         setToken(res.accessToken);
+        setRefreshToken(res.refreshToken);
         setUserRole(res.role);
         window.location.reload();
       } else {

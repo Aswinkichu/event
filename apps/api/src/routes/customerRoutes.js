@@ -36,7 +36,8 @@ const bookingSchema = z.object({
   body: z.object({
     categoryId: z.string().uuid(),
     selectedOptions: z.array(z.string().uuid()),
-    eventDate: z.string().datetime() // ISO 8601 string
+    eventDate: z.string().datetime(),
+    numberOfPeople: z.number().int().positive().optional()
   })
 });
 

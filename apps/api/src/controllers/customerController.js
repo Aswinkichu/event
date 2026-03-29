@@ -19,13 +19,14 @@ const getOptionsByCategory = async (req, res) => {
 };
 
 const createBooking = async (req, res) => {
-  const { categoryId, selectedOptions, eventDate } = req.body;
+  const { categoryId, selectedOptions, eventDate, numberOfPeople } = req.body;
   try {
     const booking = await customerService.createBooking(
       req.user.id,
       categoryId,
       selectedOptions,
-      eventDate
+      eventDate,
+      numberOfPeople
     );
     res.status(201).json(booking);
   } catch (error) {
