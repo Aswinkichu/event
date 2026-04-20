@@ -40,12 +40,13 @@ export async function renderAdmin(container) {
   // Load bookings by default
   loadAllBookings();
 
-  async function loadAllBookings() {
+  async function loadAllBookings(page = 1) {
     const content = document.getElementById('admin-content');
     content.innerHTML = '<p>Loading all bookings...</p>';
     try {
-      const data = await apiFetch('/admin/bookings');
-      const bookings = data.data || data.bookings || data;
+      const data = await apiFetch(`/admin/bookings?page=${page}&limit=10&sortBy=createdAt&order=desc`);
+      const bookings = data.data || [];
+      const { total, totalPages } = data;
       
       if (bookings.length === 0) {
         content.innerHTML = '<p>No bookings found.</p>';
@@ -79,11 +80,38 @@ export async function renderAdmin(container) {
       });
       html += '</tbody></table></div>';
       
+      // Pagination
+      if (totalPages > 1) {
+        html += '<div class="pagination" style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 1.5rem;">';
+        
+        if (page > 1) {
+          html += `<button class="btn secondary small" onclick="window.loadAllBookingsPage(${page - 1})">Previous</button>`;
+        }
+        
+        for (let i = 1; i <= totalPages; i++) {
+          if (i === page) {
+            html += `<button class="btn primary small" disabled>${i}</button>`;
+          } else if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+            html += `<button class="btn secondary small" onclick="window.loadAllBookingsPage(${i})">${i}</button>`;
+          } else if (i === page - 2 || i === page + 2) {
+            html += '<span style="padding: 0.5rem;">...</span>';
+          }
+        }
+        
+        if (page < totalPages) {
+          html += `<button class="btn secondary small" onclick="window.loadAllBookingsPage(${page + 1})">Next</button>`;
+        }
+        
+        html += '</div>';
+      }
+      
       content.innerHTML = html;
     } catch (err) {
       content.innerHTML = `<div class="error-msg">${err.message}</div>`;
     }
   }
+
+  window.loadAllBookingsPage = loadAllBookings;
 
   window.updateStatus = async (bookingId, newStatus) => {
     try {

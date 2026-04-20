@@ -440,12 +440,13 @@ export async function renderCustomer(container) {
     }
   };
 
-  async function loadMyBookings() {
+  async function loadMyBookings(page = 1) {
     const content = document.getElementById('customer-content');
     content.innerHTML = '<p>Loading bookings...</p>';
     try {
-      const data = await apiFetch('/customer/bookings');
-      const bookings = data.data || data.bookings || data;
+      const data = await apiFetch(`/customer/bookings?page=${page}&limit=10&sortBy=createdAt&order=desc`);
+      const bookings = data.data || [];
+      const { total, totalPages } = data;
       
       if (bookings.length === 0) {
         content.innerHTML = '<p>No bookings found.</p>';
@@ -465,9 +466,36 @@ export async function renderCustomer(container) {
       });
       html += '</tbody></table></div>';
       
+      // Pagination
+      if (totalPages > 1) {
+        html += '<div class="pagination" style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 1.5rem;">';
+        
+        if (page > 1) {
+          html += `<button class="btn secondary small" onclick="window.loadMyBookingsPage(${page - 1})">Previous</button>`;
+        }
+        
+        for (let i = 1; i <= totalPages; i++) {
+          if (i === page) {
+            html += `<button class="btn primary small" disabled>${i}</button>`;
+          } else if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+            html += `<button class="btn secondary small" onclick="window.loadMyBookingsPage(${i})">${i}</button>`;
+          } else if (i === page - 2 || i === page + 2) {
+            html += '<span style="padding: 0.5rem;">...</span>';
+          }
+        }
+        
+        if (page < totalPages) {
+          html += `<button class="btn secondary small" onclick="window.loadMyBookingsPage(${page + 1})">Next</button>`;
+        }
+        
+        html += '</div>';
+      }
+      
       content.innerHTML = html;
     } catch (err) {
       content.innerHTML = `<div class="error-msg">${err.message}</div>`;
     }
   }
+
+  window.loadMyBookingsPage = loadMyBookings;
 }
